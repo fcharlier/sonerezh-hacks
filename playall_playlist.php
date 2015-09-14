@@ -22,7 +22,7 @@
 define ('USER',                 false);
 
 // Name of the created playlist.
-define ('PLAYLIST',             'All songs');
+define ('PLAYLIST',             'Random songs');
 
 // Size of the chunks in add-song part of the script.
 define ('CHUNK_SIZE', 100);
@@ -63,30 +63,26 @@ $sql = 'SELECT email, id'
 if (USER) $sql .= ' WHERE email = "' . USER . '"';
 $users = query_or_die ($sql, 'Error while retrieving user\'s id');
 
-if (USER)
-{
+if (USER) {
   if (empty ($users))
     die ('User `' . USER . '` doesn\'t exist.');
   echo 'only user ' . USER . ' [' . $users[0]['id'] . '] concerned.' . PHP_EOL;
-}
-
-else
+} else {
   echo count ($users) . ' users concerned.' . PHP_EOL;
+}
 
 
 
 // Loop on users
-foreach ($users as $user)
-{
+foreach ($users as $user) {
   echo PHP_EOL . 'User ' . $user['email'] . ' [' . $user['id'] . ']:' . PHP_EOL;
-
-
 
   // Get playlist's id. Create it if needed.
   echo 'Fetching playlist… ';
+  $todays_playlist = PLAYLIST . ' ' . date('Y-m-d');
   $sql1 = 'SELECT id '
 	. 'FROM ' . $conf->prefix . 'playlists '
-	. 'WHERE title = "' . PLAYLIST . '" '
+	. 'WHERE title = "' . $todays_playlist . '" '
 	. 'AND user_id = "' . $user['id'] . '"';
   $playlists = query_or_die ($sql1, 'Error while retrieving playlists');
   $now = date ('Y-m-d H:s:s');
@@ -96,19 +92,19 @@ foreach ($users as $user)
     echo 'Playlist does not exist.' . PHP_EOL . 'Creating playlist… ';
     $sql2 = 'INSERT INTO ' . $conf->prefix . 'playlists '
 	  . '(title, created, modified, user_id) '
-	  . 'VALUES ("'.PLAYLIST.'", "'.$now.'", "'.$now.'", '.$user['id'].')';
+	  . 'VALUES ("'.$todays_playlist.'", "'.$now.'", "'.$now.'", '.$user['id'].')';
     query_or_die ($sql2, 'Error while inserting playlist', true);
     echo 'Done.' . PHP_EOL . 'Fecthing playlist… ';
     $playlists = query_or_die ($sql1, 'Error while retrieving playlists');
     if (empty ($playlists))
       die ('Fatal error: case is not supposed to happen.');
     $playlist_id = $playlists[0]['id'];
-    echo 'Found playlist ' . PLAYLIST . ' [' . $playlist_id . ']' . PHP_EOL;
+    echo 'Found playlist ' . $todays_playlist . ' [' . $playlist_id . ']' . PHP_EOL;
   }
   else
   {
     $playlist_id = $playlists[0]['id'];
-    echo 'Found playlist ' . PLAYLIST . ' [' . $playlist_id . ']' . PHP_EOL;
+    echo 'Found playlist ' . $todays_playlist . ' [' . $playlist_id . ']' . PHP_EOL;
     $sql3 = 'UPDATE ' . $conf->prefix . 'playlists '
 	  . 'SET modified = "' . $now . '" '
 	  . 'WHERE id = ' . $playlist_id;
@@ -121,7 +117,7 @@ foreach ($users as $user)
   // Get all songs ids
   echo 'Fetching all songs ids… ';
   $sql = 'SELECT id'
-       .' FROM ' . $conf->prefix . 'songs';
+       .' FROM ' . $conf->prefix . 'songs order by rand() limit 300';
   $songs = query_or_die ($sql, 'Error while retrieving songs ids');
   $songs_ids = array_map(function($e){return $e['id'];}, $songs);
   // or if you have PHP>5.5: $songs_ids = array_column ($songs, 'id'));
