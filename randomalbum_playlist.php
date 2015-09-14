@@ -23,7 +23,7 @@ define ('USER',                 false);
 
 // Name of the created playlist.
 // This script is matching on name, so make it unique !
-define ('PLAYLIST',             'Album of the day');
+define ('PLAYLIST',             'Ramdom albums of the day');
 
 // Number of song in an album to make it selectable.
 define ('MIN_ALBUM_SIZE',       5);
@@ -58,39 +58,41 @@ function query_or_die ($sql, $die_message = 'Fatal error', $exec = false)
 
 // Select random album
 echo 'Finding album… ';
-$sql = 'SELECT band, album, COUNT(*) AS nb'
+$sql = 'SELECT band, album, COUNT(*) AS nb, rand() as rand'
      .' FROM ' . $conf->prefix . 'songs'
-     .' GROUP BY band, album ';
+     .' GROUP BY band, album'
+     .' ORDER BY rand() '
+     .' LIMIT 30 ';
+
 $sql = 'CREATE TEMPORARY TABLE IF NOT EXISTS ' . $conf->prefix . 'hack_album_cardinal'
      .' AS (' . $sql . ')';
 query_or_die ($sql, 'Error while creating temporary hack_album_cardinal table', true);
 
-$sql = 'SELECT band, album'
-     .' FROM ' . $conf->prefix . 'hack_album_cardinal'
-     .' WHERE nb >= ' . MIN_ALBUM_SIZE
-     .' ORDER BY RAND()'
-     .' LIMIT 1';
-$album = query_or_die ($sql, 'Error while retrieving random album');
-if (empty ($album))
-  die ('Impossible to select an album.');
-$album = $album[0];
-echo 'Found: ' . $album['band'] . ' - ' . $album['album'] . PHP_EOL;
+// $sql = 'SELECT band, album'
+//      .' FROM ' . $conf->prefix . 'hack_album_cardinal'
+//      .' WHERE nb >= ' . MIN_ALBUM_SIZE
+//      .' AND band <> "Unknown Artist" '
+//      .' ORDER BY rand'
+//      .' LIMIT 30';
+// $albums = query_or_die ($sql, 'Error while retrieving random album');
+// if (empty ($albums))
+//   die ('Impossible to select an album.');
+// echo 'Found: ' . count($albums) . ' albums.' . PHP_EOL;
 
+$today = date('Y-m-d');
 $now = date ('Y-m-d H:s:s');
-$playlist_title = PLAYLIST . ' (' . $album['band'] . ' - ' . $album['album'] . ')';
+$playlist_title = PLAYLIST . ' ' . $today ;
 
 
 
 // Fetch random album's songs.
 echo 'Fetching songs… ';
-$sql = 'SELECT id, track_number'
-     .' FROM ' . $conf->prefix . 'songs'
-     .' WHERE band = "' . $album['band'] . '"'
-     .' AND album = "' . $album['album'] . '"'
-     .' ORDER BY track_number';
+$sql = 'SELECT id, track_number, disc*100 disc, floor(rand*100000)*10000 rand'
+     .' FROM ' . $conf->prefix . 'songs s'
+     .' INNER JOIN (' . $conf->prefix . 'hack_album_cardinal h) on (s.band = h.band and s.album = h.album)'
+     .' ORDER BY rand, disc, track_number, source_path';
+echo $sql;
 $songs = query_or_die ($sql, 'Error while retrieving songs from album');
-if (count ($songs) < MIN_ALBUM_SIZE)
-  die ('Error: this case is not supposed to happen.');
 echo 'Done.' . PHP_EOL;
 
 
@@ -124,7 +126,7 @@ foreach ($users as $user)
   echo 'Fetching playlist… ';
   $sql = 'SELECT id, title'
        .' FROM ' . $conf->prefix . 'playlists'
-       .' WHERE title LIKE "' . PLAYLIST . '%"' // note the wildcard
+       .' WHERE title = "' . $playlist_title . '"'
        .' AND user_id = "' . $user['id'] . '"';
   $playlists = query_or_die ($sql, 'Error while retrieving playlists');
   echo 'Found ' . count ($playlists) . ' playlists.' . PHP_EOL;
@@ -151,8 +153,8 @@ foreach ($users as $user)
       echo 'Deleting other playlists… ';
       // Deleting other playlists
       $sql = 'DELETE FROM ' . $conf->prefix . 'playlists'
-	   .' WHERE ('
-	   . (implode (' OR ', array_map (function($pl){return 'id='.$pl['id'];}, $playlists)))
+	  .' WHERE ('
+	  . (implode (' OR ', array_map (function($pl){return 'id='.$pl['id'];}, $playlists)))
            . ')';
       query_or_die ($sql, 'Error while deleting playlists', true);
       echo 'Done.' . PHP_EOL;
@@ -161,10 +163,10 @@ foreach ($users as $user)
     // Update playlist
     echo 'Updating playlist to ' . $playlist_title . '… ';
     $sql = 'UPDATE ' . $conf->prefix . 'playlists'
-	 .' SET title = "' . $playlist_title . '",'
-	 .'     created = "' . $now . '",'
-	 .'     modified = "' . $now . '"'
-	 .' WHERE id = ' . $playlist_id;
+	.' SET title = "' . $playlist_title . '",'
+	.'     created = "' . $now . '",'
+	.'     modified = "' . $now . '"'
+	.' WHERE id = ' . $playlist_id;
     query_or_die ($sql, 'Error while updating playlist', true);
     echo 'Done.' . PHP_EOL;
   }
@@ -194,7 +196,10 @@ foreach ($users as $user)
   echo 'Adding content to playlist… ';
   $sql = 'INSERT INTO ' . $conf->prefix . 'playlist_memberships'
        .' (playlist_id, song_id, sort) VALUES ';
-  $chunks = array_map (function($song)use($playlist_id){return '('.$playlist_id.','.$song['id'].','.$song['track_number'].')';}, $songs);
+  $chunks = array_map (function($song)use($playlist_id){return '('.$playlist_id.','.$song['id'].','.($song['rand'] + $song['disc'] + $song['track_number']).')';}, $songs);
+  echo "\n";
+  echo $sql . implode(',', $chunks);
+  echo "\n";
   query_or_die ($sql . implode (',', $chunks), 'Error while inserting playlist_memberships', true);
   echo 'Done.' . PHP_EOL;
 
